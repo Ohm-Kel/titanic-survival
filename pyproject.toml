@@ -13,7 +13,7 @@ requires-python = ">=3.10"
 dependencies = ["pandas", "numpy", "scikit-learn", "matplotlib"]
 
 [project.optional-dependencies]
-dev = ["pytest", "ruff", "jupyter", "kaggle"]
+dev = ["pytest", "pytest-cov", "ruff", "jupyter", "kaggle"]
 
 [project.scripts]
 titanic-experiments = "titanic.experiments:main"

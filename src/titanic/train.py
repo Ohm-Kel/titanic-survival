@@ -1,79 +1,78 @@
-"""Measure each engineered feature, then compare models on the full set."""
+"""Tune gradient boosting, evaluate it out-of-fold and save the final model."""
 
 import logging
+from pathlib import Path
 
+import joblib
+import matplotlib.pyplot as plt
 import pandas as pd
-from sklearn.base import ClassifierMixin
-from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
-from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import StratifiedKFold, cross_val_score
-from sklearn.pipeline import Pipeline
+from sklearn.metrics import ConfusionMatrixDisplay, classification_report
+from sklearn.model_selection import GridSearchCV, StratifiedKFold, cross_val_predict
 
 from titanic.data import load_train
-from titanic.pipeline import RAW_CATEGORICAL, RAW_NUMERIC, build_pipeline
+from titanic.pipeline import build_pipeline
 
 logger = logging.getLogger(__name__)
 
 RANDOM_STATE = 42
 N_SPLITS = 5
+MODEL_PATH = Path("models/model.joblib")
+FIGURE_PATH = Path("reports/figures/confusion_matrix.png")
+CLASS_NAMES = ["Died", "Survived"]
 
-# Each experiment adds one engineered feature group to the raw columns.
-FEATURE_EXPERIMENTS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
-    "Raw columns": (RAW_NUMERIC, RAW_CATEGORICAL),
-    "+ Title": (RAW_NUMERIC, (*RAW_CATEGORICAL, "Title")),
-    "+ FamilySize/IsAlone": (
-        (*RAW_NUMERIC, "FamilySize", "IsAlone"),
-        RAW_CATEGORICAL,
-    ),
-    "+ HasCabin": ((*RAW_NUMERIC, "HasCabin"), RAW_CATEGORICAL),
-    "All features": (
-        (*RAW_NUMERIC, "FamilySize", "IsAlone", "HasCabin"),
-        (*RAW_CATEGORICAL, "Title"),
-    ),
+# "model__" targets the pipeline step named "model".
+PARAM_GRID = {
+    "model__n_estimators": [100, 200, 300],
+    "model__learning_rate": [0.05, 0.1],
+    "model__max_depth": [2, 3, 4],
 }
 
 
-def get_models() -> dict[str, ClassifierMixin]:
-    """Return the candidate models to compare, keyed by display name."""
-    return {
-        "Logistic regression": LogisticRegression(max_iter=1000),
-        "Random forest": RandomForestClassifier(
-            n_estimators=300, random_state=RANDOM_STATE
-        ),
-        "Gradient boosting": GradientBoostingClassifier(random_state=RANDOM_STATE),
-    }
+def make_cv() -> StratifiedKFold:
+    """Return the stratified 5-fold splitter used everywhere in the project."""
+    return StratifiedKFold(n_splits=N_SPLITS, shuffle=True, random_state=RANDOM_STATE)
 
 
-def evaluate_cv(
-    pipeline: Pipeline, X: pd.DataFrame, y: pd.Series
-) -> tuple[float, float]:
-    """Return mean and standard deviation of accuracy across stratified folds."""
-    cv = StratifiedKFold(n_splits=N_SPLITS, shuffle=True, random_state=RANDOM_STATE)
-    scores = cross_val_score(pipeline, X, y, cv=cv, scoring="accuracy")
-    return scores.mean(), scores.std()
+def tune(X: pd.DataFrame, y: pd.Series) -> GridSearchCV:
+    """Try every parameter combination with cross-validation and keep the best."""
+    search = GridSearchCV(build_pipeline(), PARAM_GRID, cv=make_cv(), scoring="accuracy")
+    search.fit(X, y)
+    return search
 
 
-def women_survive_baseline(X: pd.DataFrame, y: pd.Series) -> float:
-    """Return the accuracy of predicting survival for women only."""
-    return ((X["Sex"] == "female").astype(int) == y).mean()
+def save_confusion_matrix(
+    y_true: pd.Series, y_pred: pd.Series, path: Path = FIGURE_PATH
+) -> None:
+    """Plot the out-of-fold confusion matrix and save it as an image."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    ConfusionMatrixDisplay.from_predictions(
+        y_true, y_pred, display_labels=CLASS_NAMES, cmap="Greys"
+    )
+    plt.title("Out-of-fold confusion matrix (5-fold CV)")
+    plt.tight_layout()
+    plt.savefig(path, dpi=150)
+    plt.close()
 
 
 def main() -> None:
-    """Run the feature experiments and the model comparison."""
+    """Tune, evaluate and save the final gradient boosting pipeline."""
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     X, y = load_train()
-    logger.info("%-22s %.3f", "Baseline (women)", women_survive_baseline(X, y))
 
-    logger.info("Feature experiments (gradient boosting):")
-    for name, (numeric, categorical) in FEATURE_EXPERIMENTS.items():
-        pipeline = build_pipeline(numeric=numeric, categorical=categorical)
-        mean, std = evaluate_cv(pipeline, X, y)
-        logger.info("  %-22s %.3f ± %.3f", name, mean, std)
+    search = tune(X, y)
+    std = search.cv_results_["std_test_score"][search.best_index_]
+    logger.info("Best parameters: %s", search.best_params_)
+    logger.info("Tuned CV accuracy: %.3f ± %.3f", search.best_score_, std)
 
-    logger.info("Model comparison (selected features: raw + Title):")
-    for name, model in get_models().items():
-        mean, std = evaluate_cv(build_pipeline(model), X, y)
-        logger.info("  %-22s %.3f ± %.3f", name, mean, std)
+    y_pred = cross_val_predict(search.best_estimator_, X, y, cv=make_cv())
+    report = classification_report(y, y_pred, target_names=CLASS_NAMES, digits=3)
+    logger.info("Out-of-fold classification report:\n%s", report)
+    save_confusion_matrix(y, y_pred)
+    logger.info("Saved confusion matrix to %s", FIGURE_PATH)
+
+    MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
+    joblib.dump(search.best_estimator_, MODEL_PATH)
+    logger.info("Saved model to %s", MODEL_PATH)
 
 
 if __name__ == "__main__":

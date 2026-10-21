@@ -1,25 +1,34 @@
-"""Leakage-safe preprocessing and model pipeline."""
+"""Leakage-safe feature engineering, preprocessing and model pipeline."""
+
+from collections.abc import Sequence
 
 from sklearn.base import ClassifierMixin
 from sklearn.compose import ColumnTransformer
+from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.impute import SimpleImputer
-from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.preprocessing import FunctionTransformer, OneHotEncoder, StandardScaler
 
-NUMERIC_FEATURES = ["Age", "Fare", "SibSp", "Parch"]
-CATEGORICAL_FEATURES = ["Sex", "Pclass", "Embarked"]
+from titanic.features import add_features
+
+RAW_NUMERIC = ("Age", "Fare", "SibSp", "Parch")
+RAW_CATEGORICAL = ("Sex", "Pclass", "Embarked")
+
+NUMERIC_FEATURES = (*RAW_NUMERIC, "FamilySize", "IsAlone", "HasCabin")
+CATEGORICAL_FEATURES = (*RAW_CATEGORICAL, "Title")
 
 
-def build_preprocessor() -> ColumnTransformer:
-    """Impute, scale and encode the raw columns; drop everything else."""
-    numeric = Pipeline(
+def build_preprocessor(
+    numeric: Sequence[str], categorical: Sequence[str]
+) -> ColumnTransformer:
+    """Impute, scale and encode the chosen columns; drop everything else."""
+    numeric_steps = Pipeline(
         [
             ("impute", SimpleImputer(strategy="median")),
             ("scale", StandardScaler()),
         ]
     )
-    categorical = Pipeline(
+    categorical_steps = Pipeline(
         [
             ("impute", SimpleImputer(strategy="most_frequent")),
             ("encode", OneHotEncoder(handle_unknown="ignore")),
@@ -27,17 +36,27 @@ def build_preprocessor() -> ColumnTransformer:
     )
     return ColumnTransformer(
         [
-            ("num", numeric, NUMERIC_FEATURES),
-            ("cat", categorical, CATEGORICAL_FEATURES),
+            ("num", numeric_steps, list(numeric)),
+            ("cat", categorical_steps, list(categorical)),
         ]
     )
 
 
-def build_pipeline(model: ClassifierMixin | None = None) -> Pipeline:
-    """Return the preprocessing pipeline followed by the given model.
+def build_pipeline(
+    model: ClassifierMixin | None = None,
+    numeric: Sequence[str] = NUMERIC_FEATURES,
+    categorical: Sequence[str] = CATEGORICAL_FEATURES,
+) -> Pipeline:
+    """Return feature engineering, preprocessing and the given model.
 
-    Defaults to logistic regression when no model is passed.
+    Defaults to gradient boosting on the full feature set.
     """
     if model is None:
-        model = LogisticRegression(max_iter=1000)
-    return Pipeline([("preprocess", build_preprocessor()), ("model", model)])
+        model = GradientBoostingClassifier(random_state=42)
+    return Pipeline(
+        [
+            ("features", FunctionTransformer(add_features)),
+            ("preprocess", build_preprocessor(numeric, categorical)),
+            ("model", model),
+        ]
+    )

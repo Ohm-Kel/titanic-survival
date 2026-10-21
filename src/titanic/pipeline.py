@@ -14,7 +14,9 @@ from titanic.features import add_features
 RAW_NUMERIC = ("Age", "Fare", "SibSp", "Parch")
 RAW_CATEGORICAL = ("Sex", "Pclass", "Embarked")
 
-NUMERIC_FEATURES = (*RAW_NUMERIC, "FamilySize", "IsAlone", "HasCabin")
+# Chosen by ablation: Title improved CV accuracy and stability; FamilySize,
+# IsAlone and HasCabin added nothing on top of Title.
+NUMERIC_FEATURES = RAW_NUMERIC
 CATEGORICAL_FEATURES = (*RAW_CATEGORICAL, "Title")
 
 

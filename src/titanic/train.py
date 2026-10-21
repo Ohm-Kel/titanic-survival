@@ -70,7 +70,7 @@ def main() -> None:
         mean, std = evaluate_cv(pipeline, X, y)
         logger.info("  %-22s %.3f ± %.3f", name, mean, std)
 
-    logger.info("Model comparison (all features):")
+    logger.info("Model comparison (selected features: raw + Title):")
     for name, model in get_models().items():
         mean, std = evaluate_cv(build_pipeline(model), X, y)
         logger.info("  %-22s %.3f ± %.3f", name, mean, std)

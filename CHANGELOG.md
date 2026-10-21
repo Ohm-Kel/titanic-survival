@@ -3,6 +3,15 @@
 All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- Woman-child-group model (`titanic.groups`): women survive and men do not, except where a passenger's travel group (shared ticket or family) shows otherwise. It is now the model that `titanic-train` saves and `titanic-predict` submits.
+- Repeated 10 × 5-fold cross-validation in `titanic-train`.
+
+### Removed
+- Gradient boosting grid search from `titanic-train`; gradient boosting is still compared in `titanic-experiments`.
+
 ## [0.1.0] - 2026-10-21
 
 ### Added

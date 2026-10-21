@@ -10,6 +10,7 @@ from sklearn.model_selection import StratifiedKFold, cross_val_score
 from sklearn.pipeline import Pipeline
 
 from titanic.data import load_train
+from titanic.groups import WomanChildGroupClassifier
 from titanic.pipeline import RAW_CATEGORICAL, RAW_NUMERIC, build_pipeline
 
 logger = logging.getLogger(__name__)
@@ -44,8 +45,13 @@ def get_models() -> dict[str, ClassifierMixin]:
     }
 
 
+def get_group_models() -> dict[str, ClassifierMixin]:
+    """Return models that take raw passenger rows, without the pipeline."""
+    return {"Woman-child-group": WomanChildGroupClassifier()}
+
+
 def evaluate_cv(
-    pipeline: Pipeline, X: pd.DataFrame, y: pd.Series
+    pipeline: Pipeline | ClassifierMixin, X: pd.DataFrame, y: pd.Series
 ) -> tuple[float, float]:
     """Return mean and standard deviation of accuracy across stratified folds."""
     cv = StratifiedKFold(n_splits=N_SPLITS, shuffle=True, random_state=RANDOM_STATE)
@@ -73,6 +79,9 @@ def main() -> None:
     logger.info("Model comparison (selected features: raw + Title):")
     for name, model in get_models().items():
         mean, std = evaluate_cv(build_pipeline(model), X, y)
+        logger.info("  %-22s %.3f ± %.3f", name, mean, std)
+    for name, model in get_group_models().items():
+        mean, std = evaluate_cv(model, X, y)
         logger.info("  %-22s %.3f ± %.3f", name, mean, std)
 
 

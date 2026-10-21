@@ -16,7 +16,9 @@ dependencies = ["pandas", "numpy", "scikit-learn", "matplotlib"]
 dev = ["pytest", "ruff", "jupyter", "kaggle"]
 
 [project.scripts]
+titanic-experiments = "titanic.experiments:main"
 titanic-train = "titanic.train:main"
+titanic-predict = "titanic.predict:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

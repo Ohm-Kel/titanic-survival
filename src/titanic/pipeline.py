@@ -1,5 +1,6 @@
 """Leakage-safe preprocessing and model pipeline."""
 
+from sklearn.base import ClassifierMixin
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LogisticRegression
@@ -32,11 +33,11 @@ def build_preprocessor() -> ColumnTransformer:
     )
 
 
-def build_pipeline() -> Pipeline:
-    """Return the full preprocessing + logistic regression pipeline."""
-    return Pipeline(
-        [
-            ("preprocess", build_preprocessor()),
-            ("model", LogisticRegression(max_iter=1000)),
-        ]
-    )
+def build_pipeline(model: ClassifierMixin | None = None) -> Pipeline:
+    """Return the preprocessing pipeline followed by the given model.
+
+    Defaults to logistic regression when no model is passed.
+    """
+    if model is None:
+        model = LogisticRegression(max_iter=1000)
+    return Pipeline([("preprocess", build_preprocessor()), ("model", model)])
